@@ -1,0 +1,16 @@
+# Never upload patient data or derived outputs
+data/
+outputs/
+*.nii
+*.nii.gz
+*.csv
+*.xlsx
+# Python
+__pycache__/
+*.pyc
+# R
+.Rhistory
+.RData
+.Rproj.user/
+# OS
+.DS_Store
