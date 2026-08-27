@@ -1,0 +1,6 @@
+# Pipeline dependencies (tested versions in README)
+nibabel
+numpy
+scipy
+# TotalSegmentator 2.15.0 is installed separately; the tissue tasks
+# require the free academic licence: see the TotalSegmentator repository.

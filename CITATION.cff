@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it via the Zenodo DOI."
+title: "lymphoma-l3-bodycomp: automated L3 body composition on staging PET/CT in aggressive B-cell lymphoma"
+authors:
+  - family-names: "Pozzi"
+    given-names: "Jacopo"
+version: 1.0.0
+date-released: 2026-08-27
+license: MIT
+doi: 10.5281/zenodo.XXXXXXX
