@@ -2,7 +2,7 @@
 
 Automated L3 body composition from the low-dose CT of staging [18F]FDG PET/CT, and its association with survival in aggressive B-cell lymphoma.
 
-Code accompanying: *Automated CT body composition on staging PET/CT: myosteatosis and survival in aggressive B-cell lymphoma* (manuscript under review). Archived release: Zenodo DOI `10.5281/zenodo.XXXXXXX` (to be minted at first release).
+Code accompanying: *Automated CT body composition on staging PET/CT: myosteatosis and survival in aggressive B-cell lymphoma* (manuscript under review). Archived release: Zenodo DOI 10.5281/zenodo.22121858
 
 ## What is here
 
