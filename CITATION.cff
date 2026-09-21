@@ -4,7 +4,7 @@ title: "lymphoma-l3-bodycomp: automated L3 body composition on staging PET/CT in
 authors:
   - family-names: "Pozzi"
     given-names: "Jacopo"
-version: 1.0.0
-date-released: 2026-08-27
+version: 1.1.0
+date-released: 2026-09-21
 license: MIT
-doi: 10.5281/zenodo.22121858
+doi: 10.5281/zenodo.22121857
