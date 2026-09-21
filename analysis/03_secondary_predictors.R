@@ -3,39 +3,46 @@
 #
 # Secondary body-composition predictors.
 #
-# Reproduces:
-#   - Table 4: hazard ratios per 1-SD increase for the nine prespecified
-#     secondary predictors, on both co-primary endpoints, with Benjamini-
-#     Hochberg false-discovery-rate correction applied within each endpoint;
-#   - the exploratory skeletal muscle gauge, which lies outside the correction
-#     family and is reported with uncorrected p-values.
+# Computes hazard ratios per 1 within-cohort SD for the nine prespecified
+# secondary predictors, on both endpoints, each modelled separately with the
+# covariates of the co-primary models. Benjamini-Hochberg false-discovery-rate
+# correction is applied within each endpoint, the two endpoints forming
+# separate correction families.
 #
-# Each predictor is modelled separately, adjusted for sex, IPI group and age,
-# with the same specification as the co-primary models. The predictors are
-# strongly intercorrelated and are interpreted in the manuscript as one
-# correlated signal, not as independent effects.
+# The skeletal muscle gauge is exploratory, lies outside the correction family
+# and is reported with uncorrected p-values.
 #
-# Input:  data/clinical_dataset_n155.csv
-#         data/imaging_L3_quantitative_n155.csv
-# Output: printed to standard output; no files are written.
+# The predictors are strongly intercorrelated; they estimate one correlated
+# signal, not independent effects.
 #
-# Run from the package root:  Rscript code/03_secondary_predictors.R
-# Requires R >= 4.5 and the 'survival' package.
+# Input:  clinical and imaging tables (docs/data_dictionary.md).
+# Output: standard output.
+#
+# R >= 4.5; package survival.
 # -----------------------------------------------------------------------------
 
 library(survival)
 
+# ---- Input ------------------------------------------------------------------
+# Adapt these paths to your own data. The columns each table must provide are
+# listed in docs/data_dictionary.md; nothing else in the script depends on how
+# the files are named or where they are kept.
 clin <- read.csv(file.path("data", "clinical_dataset_n155.csv"), na.strings = c("NA", ""))
 img  <- read.csv(file.path("data", "imaging_L3_quantitative_n155.csv"), na.strings = c("NA", ""))
-stopifnot(nrow(clin) == 155, identical(clin$patient_id, img$patient_id))
+stopifnot(nrow(clin) == nrow(img), identical(clin$patient_id, img$patient_id))
+
+# Category labels this script reads; recode your data or change them here.
+sex_levels <- c("M", "F")
+ipi_levels <- c("Low", "L-Int", "H-Int", "High")
+stopifnot(all(clin$sex %in% sex_levels), all(clin$ipi_group %in% ipi_levels))
 
 z  <- function(x) (x - mean(x)) / sd(x)
 df <- data.frame(
   os_months  = clin$os_months,  os_event  = clin$os_event,
   pfs_months = clin$pfs_months, pfs_event = clin$pfs_event,
   age_z = z(clin$age_years),
-  sex   = factor(clin$sex, levels = c("M", "F")),
-  ipi   = factor(clin$ipi_group, levels = c("Low", "L-Int", "H-Int", "High"))
+  sex   = factor(clin$sex, levels = sex_levels),
+  ipi   = factor(clin$ipi_group, levels = ipi_levels)
 )
 
 # The nine prespecified predictors (the correction family) and, listed last,
@@ -74,7 +81,7 @@ run_family <- function(time, event) {
 os  <- run_family("os_months",  "os_event")
 pfs <- run_family("pfs_months", "pfs_event")
 
-cat("==== Secondary predictors (Table 4): HR per 1 SD, adjusted for sex, IPI, age ====\n")
+cat("==== Secondary predictors: HR per 1 SD, adjusted for sex, IPI, age ====\n")
 cat(sprintf("%-32s %-24s %-8s %-24s %-8s\n",
             "Predictor", "OS HR (95% CI)", "OS FDR", "PFS HR (95% CI)", "PFS FDR"))
 for (i in seq_along(predictors)) {

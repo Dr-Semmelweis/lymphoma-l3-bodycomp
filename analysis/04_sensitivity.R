@@ -1,32 +1,30 @@
 # -----------------------------------------------------------------------------
 # 04_sensitivity.R
 #
-# Sensitivity analyses, prespecified and post hoc.
+# Sensitivity analyses.
 #
-# Reproduces (Results, "Sensitivity analyses"):
-#   Prespecified -
+# Prespecified:
 #   1. restriction to DLBCL-NOS and high-grade B-cell lymphoma;
-#   2. survival measured from the start of treatment rather than from staging;
+#   2. survival measured from start of treatment rather than from staging;
 #   3. the NAMA/TAMA index as the exposure;
-#   4. informative-censoring checks (Cox model on the censoring indicator);
-#   5. restriction to the 5 mm reconstruction-protocol group.
-#   Post hoc -
-#   6. interaction between muscle density and reconstruction protocol, with the
-#      between-protocol comparison of muscle density;
-#   7. muscle density and end-of-treatment complete response (Firth penalised
-#      logistic regression);
-#   8. interaction between muscle density and sex.
+#   4. informative censoring, as a Cox model on the censoring indicator;
+#   5. restriction to one reconstruction protocol group.
 #
-# Standardisation note: z-scores are computed once, on the full cohort of 155,
-# and carried unchanged into every subset, so that "per 1 SD" means the same
-# quantity in every row of the output.
+# Post hoc:
+#   6. exposure by reconstruction protocol, with the between-protocol
+#      comparison of muscle density;
+#   7. muscle density and end-of-treatment complete response, by Firth
+#      penalised logistic regression;
+#   8. exposure by sex.
 #
-# Input:  data/clinical_dataset_n155.csv
-#         data/imaging_L3_quantitative_n155.csv
-# Output: printed to standard output; no files are written.
+# Interactions are tested by likelihood ratio. Z-scores are computed once on
+# the full cohort and carried unchanged into every subset, so that "per 1 SD"
+# denotes the same quantity throughout.
 #
-# Run from the package root:  Rscript code/04_sensitivity.R
-# Requires R >= 4.5 and the packages 'survival', 'logistf'.
+# Input:  clinical and imaging tables (docs/data_dictionary.md).
+# Output: standard output.
+#
+# R >= 4.5; packages survival, logistf.
 # -----------------------------------------------------------------------------
 
 suppressPackageStartupMessages({
@@ -34,9 +32,25 @@ suppressPackageStartupMessages({
   library(logistf)
 })
 
+# ---- Input ------------------------------------------------------------------
+# Adapt these paths to your own data. The columns each table must provide are
+# listed in docs/data_dictionary.md; nothing else in the script depends on how
+# the files are named or where they are kept.
 clin <- read.csv(file.path("data", "clinical_dataset_n155.csv"), na.strings = c("NA", ""))
 img  <- read.csv(file.path("data", "imaging_L3_quantitative_n155.csv"), na.strings = c("NA", ""))
-stopifnot(nrow(clin) == 155, identical(clin$patient_id, img$patient_id))
+stopifnot(nrow(clin) == nrow(img), identical(clin$patient_id, img$patient_id))
+
+# Category labels this script reads; recode your data or change them here.
+# 'protocol_levels' takes the restricted group first, and 'histology_keep'
+# the histologies retained in the first sensitivity analysis.
+sex_levels      <- c("M", "F")
+ipi_levels      <- c("Low", "L-Int", "H-Int", "High")
+protocol_levels <- c("5mm", "3mm")
+histology_keep  <- c("DLBCL-NOS", "HGBCL")
+stopifnot(all(clin$sex %in% sex_levels), all(clin$ipi_group %in% ipi_levels),
+          length(protocol_levels) == 2,
+          all(clin$reconstruction_protocol %in% protocol_levels),
+          any(clin$histology_group %in% histology_keep))
 
 z  <- function(x) (x - mean(x)) / sd(x)
 df <- data.frame(
@@ -47,10 +61,10 @@ df <- data.frame(
   smd_z  = z(img$smd_mean_hu),
   nt_z   = z(img$nama_tama_index_pct),
   age_z  = z(clin$age_years),
-  sex    = factor(clin$sex, levels = c("M", "F")),
-  ipi    = factor(clin$ipi_group, levels = c("Low", "L-Int", "H-Int", "High")),
+  sex    = factor(clin$sex, levels = sex_levels),
+  ipi    = factor(clin$ipi_group, levels = ipi_levels),
   histology = clin$histology_group,
-  protocol  = factor(clin$reconstruction_protocol, levels = c("5mm", "3mm")),
+  protocol  = factor(clin$reconstruction_protocol, levels = protocol_levels),
   eot       = clin$eot_complete_response,
   smd_hu    = img$smd_mean_hu
 )
@@ -75,11 +89,11 @@ both <- function(label, d, x = "smd_z", tos = "os_months", eos = "os_event",
 
 cat("==== Prespecified sensitivity analyses ====\n")
 
-both("1. Restriction to DLBCL-NOS + HGBCL",
-     df[df$histology %in% c("DLBCL-NOS", "HGBCL"), ])
+both(sprintf("1. Restriction to %s", paste(histology_keep, collapse = " + ")),
+     df[df$histology %in% histology_keep, ])
 
 # Time origin at the start of first-line treatment. The pre-computed columns
-# are missing for the one patient without systemic treatment; non-positive
+# are missing for patients without systemic treatment; non-positive
 # times, which cannot enter a survival model, are excluded by the same filter.
 both("2. Time origin at treatment start",
      df[!is.na(df$os_tx) & df$os_tx > 0 & !is.na(df$pfs_tx) & df$pfs_tx > 0, ],
@@ -95,7 +109,8 @@ mc <- coxph(Surv(os_months, cens) ~ smd_z + sex + ipi + age_z, data = cens)
 cat(sprintf("4. Censoring model: muscle density on the censoring indicator, p=%.2f\n",
             summary(mc)$coefficients["smd_z", 5]))
 
-both("5. Restriction to the 5 mm protocol group", df[df$protocol == "5mm", ])
+both(sprintf("5. Restriction to the %s protocol group", protocol_levels[1]),
+     df[df$protocol == protocol_levels[1], ])
 
 cat("\n==== Post-hoc analyses ====\n")
 
@@ -111,7 +126,8 @@ for (ep in list(c("os_months", "os_event", "OS"),
   cat(sprintf("  %-4s likelihood-ratio p=%.2f\n", ep[3], a[2, "Pr(>|Chi|)"]))
 }
 tt <- t.test(smd_hu ~ protocol, data = df)
-cat(sprintf("  density 5 mm vs 3 mm: difference %.2f HU (%.2f SD), p=%.2f\n",
+cat(sprintf("  density %s vs %s: difference %.2f HU (%.2f SD), p=%.2f\n",
+            protocol_levels[1], protocol_levels[2],
             diff(tt$estimate), diff(tt$estimate) / sd(df$smd_hu), tt$p.value))
 
 # 7. End-of-treatment complete response, evaluable patients only. Firth

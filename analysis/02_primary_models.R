@@ -1,24 +1,25 @@
 # -----------------------------------------------------------------------------
 # 02_primary_models.R
 #
-# Co-primary Cox proportional-hazards models.
+# Co-primary Cox models for overall and progression-free survival.
 #
-# Reproduces:
-#   - Table 3: both co-primary models (overall and progression-free survival),
-#     all covariates, with concordance and Schoenfeld tests;
-#   - the bootstrap confidence intervals for the primary exposure;
-#   - the restricted-cubic-spline tests for non-linearity;
-#   - the comparison models without the continuous age term, quoted in the
-#     Discussion;
-#   - the events-per-variable ratios quoted in Methods.
+# Computes:
+#   - hazard ratios per 1 within-cohort SD of L3 muscle attenuation, adjusted
+#     for sex, IPI group and age, with concordance and Schoenfeld tests;
+#   - stratified bias-corrected accelerated bootstrap intervals for the
+#     exposure, 5,000 resamples, seed fixed in the code;
+#   - restricted cubic splines on the exposure, four knots, with the test for
+#     non-linearity;
+#   - the same models without the continuous age term;
+#   - events per variable.
 #
-# Input:  data/clinical_dataset_n155.csv
-#         data/imaging_L3_quantitative_n155.csv
-# Output: printed to standard output; no files are written.
+# Both endpoints are co-primary: no correction is applied across them.
 #
-# Run from the package root:  Rscript code/02_primary_models.R
-# Requires R >= 4.5 and the packages 'survival', 'boot', 'rms'.
-# The bootstrap (2 x 5,000 refits) takes one to two minutes.
+# Input:  clinical and imaging tables (docs/data_dictionary.md).
+# Output: standard output.
+#
+# R >= 4.5; packages survival, boot, rms. The bootstrap takes one to two
+# minutes.
 # -----------------------------------------------------------------------------
 
 suppressPackageStartupMessages({
@@ -27,9 +28,18 @@ suppressPackageStartupMessages({
   library(rms)
 })
 
+# ---- Input ------------------------------------------------------------------
+# Adapt these paths to your own data. The columns each table must provide are
+# listed in docs/data_dictionary.md; nothing else in the script depends on how
+# the files are named or where they are kept.
 clin <- read.csv(file.path("data", "clinical_dataset_n155.csv"), na.strings = c("NA", ""))
 img  <- read.csv(file.path("data", "imaging_L3_quantitative_n155.csv"), na.strings = c("NA", ""))
-stopifnot(nrow(clin) == 155, identical(clin$patient_id, img$patient_id))
+stopifnot(nrow(clin) == nrow(img), identical(clin$patient_id, img$patient_id))
+
+# Category labels this script reads; recode your data or change them here.
+sex_levels <- c("M", "F")
+ipi_levels <- c("Low", "L-Int", "H-Int", "High")
+stopifnot(all(clin$sex %in% sex_levels), all(clin$ipi_group %in% ipi_levels))
 
 # Analysis frame. Reference levels are fixed explicitly: male sex and low IPI.
 # The exposure and age are standardised to mean 0, SD 1 within the cohort, so
@@ -40,8 +50,8 @@ df <- data.frame(
   pfs_months = clin$pfs_months, pfs_event = clin$pfs_event,
   smd_z = z(img$smd_mean_hu),
   age_z = z(clin$age_years),
-  sex   = factor(clin$sex, levels = c("M", "F")),
-  ipi   = factor(clin$ipi_group, levels = c("Low", "L-Int", "H-Int", "High"))
+  sex   = factor(clin$sex, levels = sex_levels),
+  ipi   = factor(clin$ipi_group, levels = ipi_levels)
 )
 cat(sprintf("n = %d | OS events = %d | PFS events = %d\n", nrow(df),
             sum(df$os_event), sum(df$pfs_event)))
@@ -74,7 +84,7 @@ report(pfs_fit, "Progression-free survival (co-primary)")
 
 # ---- Comparison without the continuous age term -----------------------------
 # Quantifies what continuous age adjustment adds beyond the dichotomised age
-# term already inside the IPI (Discussion: OS 0.42 -> 0.51; PFS 0.66 -> 0.71).
+# term already inside the IPI.
 hr1 <- function(m) {
   ci <- summary(m)$conf.int["smd_z", ]
   sprintf("HR %.3f (%.3f-%.3f)", ci[1], ci[3], ci[4])
@@ -87,8 +97,8 @@ cat("  PFS: ", hr1(coxph(Surv(pfs_months, pfs_event) ~ smd_z + sex + ipi, data =
 # Nonparametric check of the model-based interval: 5,000 resamples drawn within
 # strata defined by the categorical covariates (sex x IPI group), hazard ratio
 # for muscle density refitted on each, bias-corrected and accelerated interval.
-# The seed reproduces the published intervals exactly; resamples in which the
-# model fails to converge are discarded and counted.
+# The seed makes the intervals reproducible; resamples in which the model
+# fails to converge are discarded and counted.
 set.seed(20260522)
 strata <- interaction(df$sex, df$ipi, drop = TRUE)
 boot_hr <- function(time, event) {
@@ -128,8 +138,10 @@ for (ep in list(c("os_months", "os_event", "OS"),
 }
 
 # ---- Events per variable ----------------------------------------------------
-# Six estimated parameters: exposure, sex, three IPI contrasts, age.
-cat("\n==== Events per variable (6 parameters) ====\n")
-cat(sprintf("  OS : %d/6 = %.1f\n  PFS: %d/6 = %.1f\n",
-            sum(df$os_event), sum(df$os_event) / 6,
-            sum(df$pfs_event), sum(df$pfs_event) / 6))
+# Estimated parameters: exposure, sex, the IPI contrasts, age.
+p_os  <- length(coef(os_fit))
+p_pfs <- length(coef(pfs_fit))
+cat(sprintf("\n==== Events per variable (%d parameters) ====\n", p_os))
+cat(sprintf("  OS : %d/%d = %.1f\n  PFS: %d/%d = %.1f\n",
+            sum(df$os_event), p_os, sum(df$os_event) / p_os,
+            sum(df$pfs_event), p_pfs, sum(df$pfs_event) / p_pfs))
