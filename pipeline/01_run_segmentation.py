@@ -17,6 +17,7 @@ Tested with TotalSegmentator 2.15.0 (pre-trained weights, no retraining),
 PyTorch 2.10, CUDA 12.8, Python 3.12.
 """
 import argparse
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -40,6 +41,9 @@ def main() -> None:
     ap.add_argument("--seg-dir", required=True, type=Path)
     ap.add_argument("--device", default="gpu")
     args = ap.parse_args()
+
+    if shutil.which("TotalSegmentator") is None:
+        sys.exit("TotalSegmentator not found on PATH")
 
     patients = sorted(d for d in args.nifti_dir.iterdir() if d.is_dir())
     failures = 0

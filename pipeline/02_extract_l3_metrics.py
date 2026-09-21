@@ -40,8 +40,11 @@ FIELDS = [
 ]
 
 
-def mask_slice(path: Path, z: int) -> np.ndarray:
-    return np.asarray(nib.load(path).dataobj[:, :, z]) > 0
+def mask_slice(path: Path, z: int, shape: tuple) -> np.ndarray:
+    m = nib.load(path)
+    if m.shape[:3] != shape:
+        raise ValueError(f"{path.name}: grid {m.shape[:3]} differs from the CT grid {shape}")
+    return np.asarray(m.dataobj[:, :, z]) > 0
 
 
 def extract(pid: str, nifti_dir: Path, seg_dir: Path) -> dict:
@@ -50,20 +53,24 @@ def extract(pid: str, nifti_dir: Path, seg_dir: Path) -> dict:
     if len(nii) != 1:
         return {"patient_id": pid, "error": "expected exactly one CT NIfTI"}
     ct = nib.load(nii[0])
+    if nib.aff2axcodes(ct.affine)[2] not in ("S", "I"):
+        return {"patient_id": pid, "error": "third axis is not cranio-caudal; "
+                                            "reorient the volume to axial slices"}
     sp = ct.header.get_zooms()
     px = (sp[0] * sp[1]) / 100                      # cm^2 per pixel
 
+    shape = ct.shape[:3]
     l3 = nib.load(seg / "total" / "vertebrae_L3.nii.gz").get_fdata()
     if not np.any(l3 > 0):
         return {"patient_id": pid, "error": "empty L3 mask"}
     zs = np.where(l3 > 0)[2]
     z = int(np.median(zs))
 
-    trunk = mask_slice(seg / "body" / "body_trunc.nii.gz", z)
-    sm_raw = mask_slice(seg / "tissue_types" / "skeletal_muscle.nii.gz", z)
-    sat_raw = mask_slice(seg / "tissue_types" / "subcutaneous_fat.nii.gz", z)
-    vat_raw = mask_slice(seg / "tissue_types" / "torso_fat.nii.gz", z)
-    imat_raw = mask_slice(seg / "tissue_4_types" / "intermuscular_fat.nii.gz", z)
+    trunk = mask_slice(seg / "body" / "body_trunc.nii.gz", z, shape)
+    sm_raw = mask_slice(seg / "tissue_types" / "skeletal_muscle.nii.gz", z, shape)
+    sat_raw = mask_slice(seg / "tissue_types" / "subcutaneous_fat.nii.gz", z, shape)
+    vat_raw = mask_slice(seg / "tissue_types" / "torso_fat.nii.gz", z, shape)
+    imat_raw = mask_slice(seg / "tissue_4_types" / "intermuscular_fat.nii.gz", z, shape)
 
     sm, sat, vat, imat_m = (m & trunk for m in (sm_raw, sat_raw, vat_raw, imat_raw))
     s = np.asarray(ct.dataobj[:, :, z])
